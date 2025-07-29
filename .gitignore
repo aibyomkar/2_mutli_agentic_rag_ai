@@ -1,0 +1,24 @@
+# Virtual environments
+venv/
+env/
+.env
+.venv/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# PyTorch/ML model files
+*.pth
+*.pt
+*.pkl
+*.model
+
+# Other common excludes
+.DS_Store
+*.log
+.idea/
+.vscode/
