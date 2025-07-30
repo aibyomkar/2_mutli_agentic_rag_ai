@@ -89,7 +89,7 @@ structured_llm_with_router = llm.with_structured_output(RouteQuery)
 
 # Create router prompt
 system = '''You are an expert at routing a user question to a vectorstore or wikipedia.
-The vectorstore contains documents related to agents, prompt engineering, and adversarial attacks.
+The vectorstore contains documents related to Sanatan Dharma, Hinduism, and Bhagvad Geeta.
 Use the vectorstore for questions on these topics. Otherwise, use wiki-search.'''
 
 route_prompt = ChatPromptTemplate.from_messages([
@@ -231,9 +231,9 @@ def interactive_mode():
 if __name__ == "__main__":
     # Test with different types of questions
     print("🧪 RUNNING TEST QUESTIONS...")
-    ask_question("What is an agent?")
+    ask_question("Who is krishan bhagwan?")
     ask_question("Who is Shahrukh Khan?")
-    ask_question("What is prompt engineering?")
+    ask_question("What is sanatan dharma?")
     
     # Ask user if they want interactive mode
     print("\n" + "="*60)
