@@ -1,0 +1,12 @@
+streamlit==1.32.0
+langchain==0.2.10
+langchain-community==0.2.8
+langchain-huggingface==0.0.3
+langchain-groq==0.1.2
+langgraph==0.1.10
+cassio==0.1.2
+pypdf==4.0.0
+pydantic==2.6.4
+tiktoken==0.7.0
+wikipedia==1.4.0
+python-dotenv==1.0.1
