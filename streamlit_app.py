@@ -5,7 +5,7 @@ import os
 
 # Page config
 st.set_page_config(
-    page_title="🕉️ HinduGPT",
+    page_title="HinduGPT",
     page_icon="🕉️",
     layout="centered"
 )
