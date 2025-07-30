@@ -22,3 +22,7 @@ __pycache__/
 *.log
 .idea/
 .vscode/
+
+#data excludes
+data
+data/
