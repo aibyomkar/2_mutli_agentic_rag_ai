@@ -274,6 +274,14 @@
 
 
 
+
+
+
+
+
+
+
+
 # main.py
 import os
 import warnings
@@ -292,7 +300,6 @@ from langchain_community.tools import WikipediaQueryRun
 from typing_extensions import TypedDict
 from langchain.schema import Document
 from langgraph.graph import END, StateGraph, START
-from pprint import pprint
 
 # Suppress warnings
 warnings.filterwarnings("ignore", category=FutureWarning)
@@ -311,56 +318,76 @@ retriever = None
 app = None
 
 def initialize_hindugpt():
-    """Initialize the HinduGPT system: load PDF, create vector store, build graph."""
+    """Initialize the HinduGPT system: load PDF from data/, create vector store, build graph."""
     global retriever, app
 
     print("🚀 Initializing HinduGPT...")
 
     # Initialize Astra DB
+    if not ASTRA_DB_APPLICATION_TOKEN or not ASTRA_DB_ID:
+        print("❌ Astra DB credentials missing! Check your .env file.")
+        return None
+
     print("📡 Connecting to Astra DB...")
     try:
         cassio.init(token=ASTRA_DB_APPLICATION_TOKEN, database_id=ASTRA_DB_ID)
     except Exception as e:
         print(f"❌ Failed to connect to Astra DB: {e}")
-        return
+        return None
 
     # Embeddings
     print("🧠 Loading embeddings model...")
     embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 
-    # Load Bhagavad Gita PDF
-    print("📚 Loading Bhagavad Gita PDF...")
-    pdf_url = "https://www.prabhupada-books.de/pdf/Bhagavad-gita-As-It-Is.pdf"
+    # Load Bhagavad Gita PDF from data folder
+    pdf_path = os.path.join("data", "Bhagavad_Gita_As_It_Is.pdf")
+    print(f"📚 Looking for PDF at: {os.path.abspath(pdf_path)}")
+
+    if not os.path.exists(pdf_path):
+        print(f"❌ PDF not found at {pdf_path}")
+        print("Please make sure you have a 'data' folder with 'Bhagavad_Gita_As_It_Is.pdf' inside.")
+        return None
+
     try:
-        loader = PyPDFLoader(pdf_url)
+        print("📖 Loading Bhagavad Gita PDF...")
+        loader = PyPDFLoader(pdf_path)
         doc_list = loader.load()
+        print(f"✅ Loaded {len(doc_list)} pages from the Gita.")
     except Exception as e:
         print(f"❌ Failed to load PDF: {e}")
-        return
+        return None
 
     # Split text
-    print("✂️  Splitting documents...")
+    print("✂️  Splitting documents into chunks...")
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
     docs_split = text_splitter.split_documents(doc_list)
 
     # Vector Store
     print("💾 Creating vector store in Astra DB...")
-    astra_vector_store = Cassandra(
-        embedding=embeddings,
-        table_name="hindugpt_geeta",
-        session=None,
-        keyspace=None
-    )
-    astra_vector_store.add_documents(docs_split)
-    print(f"✅ Inserted {len(docs_split)} chunks into vector store.")
+    try:
+        astra_vector_store = Cassandra(
+            embedding=embeddings,
+            table_name="hindugpt_geeta",
+            session=None,
+            keyspace=None
+        )
+        astra_vector_store.add_documents(docs_split)
+        print(f"✅ Inserted {len(docs_split)} document chunks into vector store.")
+    except Exception as e:
+        print(f"❌ Failed to create vector store: {e}")
+        return None
 
     retriever = astra_vector_store.as_retriever()
 
     # LLM
+    if not GROQ_API_KEY:
+        print("❌ GROQ_API_KEY is missing! Please set it in .env")
+        return None
+
     print("🤖 Initializing ChatGroq LLM...")
     llm = ChatGroq(groq_api_key=GROQ_API_KEY, model_name="Llama-3.3-70b-Versatile")
 
-    # Router
+    # Router model
     class RouteQuery(BaseModel):
         datasource: Literal["vectorstore", "wiki_search"] = Field(
             ..., description="Route to vectorstore (Geeta) or wiki"
@@ -371,8 +398,8 @@ def initialize_hindugpt():
     route_prompt = ChatPromptTemplate.from_messages([
         ("system", """
         You are an expert router for HinduGPT.
-        Route queries about Bhagavad Gita, Sanatan Dharma, Krishna, Dharma, Karma, etc. to 'vectorstore'.
-        All other queries go to 'wiki_search'.
+        Route queries about Bhagavad Gita, Sanatan Dharma, Krishna, Dharma, Karma, Arjuna, etc. to 'vectorstore'.
+        All other general knowledge questions go to 'wiki_search'.
         """),
         ("human", "{question}")
     ])
@@ -390,31 +417,45 @@ def initialize_hindugpt():
 
     # Nodes
     def retrieve(state):
-        print("🔍 Retrieving from Geeta vector store...")
+        print("🔍 Retrieving from Bhagavad Gita vector store...")
         docs = retriever.invoke(state["question"])
         return {"documents": docs, "question": state["question"]}
 
     def wiki_search(state):
         print("🌐 Searching Wikipedia...")
-        result = wiki_tool.invoke({"query": state["question"]})
-        doc = Document(page_content=result)
-        return {"documents": [doc], "question": state["question"]}
+        try:
+            result = wiki_tool.invoke({"query": state["question"]})
+            doc = Document(page_content=result)
+            return {"documents": [doc], "question": state["question"]}
+        except Exception as e:
+            error_doc = Document(page_content=f"⚠️ Wikipedia search failed: {str(e)}")
+            return {"documents": [error_doc], "question": state["question"]}
 
     def route_question(state):
-        source = question_router.invoke({"question": state["question"]})
-        return source.datasource
+        print("🧭 Routing question...")
+        try:
+            source = question_router.invoke({"question": state["question"]})
+            return source.datasource
+        except Exception:
+            # Fallback to wiki if LLM fails
+            return "wiki_search"
 
     # Build Graph
     workflow = StateGraph(GraphState)
     workflow.add_node("retrieve", retrieve)
     workflow.add_node("wiki_search", wiki_search)
-    workflow.add_conditional_edges(START, route_question, {
-        "vectorstore": "retrieve",
-        "wiki_search": "wiki_search"
-    })
+
+    workflow.add_conditional_edges(
+        START,
+        route_question,
+        {
+            "vectorstore": "retrieve",
+            "wiki_search": "wiki_search"
+        }
+    )
     workflow.add_edge("retrieve", END)
     workflow.add_edge("wiki_search", END)
-    app = workflow.compile()
 
+    app = workflow.compile()
     print("✅ HinduGPT initialization complete!")
     return app
