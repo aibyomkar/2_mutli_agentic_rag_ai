@@ -41,9 +41,7 @@ cassio.init(token=ASTRA_DB_APPLICATION_TOKEN, database_id=ASTRA_DB_ID)
 # Build index
 print("📚 Loading and processing documents...")
 urls = [
-    "https://lilianweng.github.io/posts/2023-06-23-agent/",
-    "https://lilianweng.github.io/posts/2023-03-15-prompt-engineering/",
-    "https://lilianweng.github.io/posts/2023-10-25-adv-attack-llm/"
+    "https://www.prabhupada-books.de/pdf/Bhagavad-gita-As-It-Is.pdf"
 ]
 
 # Load documents
