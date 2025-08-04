@@ -1,6 +1,6 @@
 # streamlit_app.py
 import streamlit as st
-from main import initialize_hindugpt, app
+from main import initialize, app
 import os
 
 # Page config
@@ -13,31 +13,28 @@ st.set_page_config(
 # Title & Description
 st.title("🕉️ HinduGPT")
 st.markdown("""
-> *“Whenever dharma declines, O Arjuna, I manifest Myself.”* — Bhagavad Gita 4.7
+> *"Whenever dharma declines, O Arjuna, I manifest Myself."* — Bhagavad Gita 4.7
 """)
 st.markdown("Ask questions about **Krishna**, **Dharma**, **Karma**, **Life**, or anything — answered through the wisdom of the **Bhagavad Gita** or general knowledge.")
 
-# Initialize HinduGPT only once
-if "app" not in st.session_state:
-    st.session_state.app = None
+# Initialize session state
+if "messages" not in st.session_state:
     st.session_state.messages = []
     st.session_state.initialized = False
 
-# Lazy initialization
+# One-time initialization
 if not st.session_state.initialized:
-    with st.spinner("🧠 Loading Bhagavad Gita and initializing AI... (This may take a minute)"):
+    with st.spinner("🧠 Loading Bhagavad Gita... (First time may take a minute)"):
         try:
-            st.session_state.app = initialize_hindugpt()
-            if st.session_state.app:
-                st.session_state.initialized = True
-                st.success("✅ HinduGPT is ready! Ask your question below.")
-            else:
-                st.error("💥 Failed to initialize. Please check logs and environment setup.")
+            initialize()
+            st.session_state.initialized = True
+            st.success("✅ HinduGPT is ready!")
         except Exception as e:
-            st.error(f"💥 Initialization error: {str(e)}")
-            st.info("💡 Make sure: \n- `data/Bhagavad_Gita_As_It_Is.pdf` exists \n- Your `.env` has valid API keys")
+            st.error(f"💥 Error: {str(e)}")
+            st.info("💡 Check: data/Bhagavad_Gita_As_It_Is.pdf exists and .env has valid keys")
+            st.stop()
 
-# Show chat only if initialized
+# Chat interface
 if st.session_state.initialized:
     # Display chat history
     for message in st.session_state.messages:
@@ -45,36 +42,57 @@ if st.session_state.initialized:
             st.markdown(message["content"])
 
     # Chat input
-    if prompt := st.chat_input("Ask a question about life, dharma, Krishna, or anything..."):
+    if prompt := st.chat_input("Ask about life, dharma, Krishna, or anything..."):
         # Add user message
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
 
-        # Generate AI response
+        # Generate response
         with st.chat_message("assistant"):
             with st.spinner("🔍 Seeking wisdom..."):
                 try:
-                    inputs = {"question": prompt}
                     result = None
-                    for output in st.session_state.app.stream(inputs):
+                    for output in app.stream({"question": prompt}):
                         result = list(output.values())[0]
 
                     # Format response
-                    docs = result["documents"]
-                    if docs and isinstance(docs, list):
-                        content = docs[0].page_content.strip()
-                        if len(content) > 20:
-                            response = f"📘 **From the Bhagavad Gita:**\n\n{content[:800]}..."
+                    if result and "documents" in result:
+                        docs = result["documents"]
+                        if docs:
+                            content = docs[0].page_content.strip()
+                            
+                            # Determine source and format response
+                            if "Krishna" in content or "Arjuna" in content or "dharma" in content.lower():
+                                response = f"📘 **From the Bhagavad Gita:**\n\n{content[:600]}..."
+                            else:
+                                response = f"🌐 **General Knowledge:**\n\n{content[:600]}..."
                         else:
-                            response = f"🌐 **From Wikipedia:**\n\n{content}"
+                            response = "⚠️ No relevant information found."
                     else:
-                        content = docs[0].page_content if isinstance(docs, list) else getattr(docs, 'page_content', str(docs))
-                        response = f"🌐 **General Knowledge:**\n\n{content[:800]}..."
+                        response = "❌ Unable to process your question. Please try again."
 
                     st.markdown(response)
                     st.session_state.messages.append({"role": "assistant", "content": response})
+                    
                 except Exception as e:
-                    error_msg = "I couldn't retrieve an answer right now. Please try again."
-                    st.markdown(f"❌ {error_msg}")
+                    error_msg = f"❌ Error: {str(e)}"
+                    st.markdown(error_msg)
                     st.session_state.messages.append({"role": "assistant", "content": error_msg})
+
+# Sidebar with info
+with st.sidebar:
+    st.markdown("### 🕉️ About HinduGPT")
+    st.markdown("Spiritual AI powered by the **Bhagavad Gita**")
+    
+    st.markdown("### 💫 Try asking:")
+    st.markdown("""
+    - What does Krishna say about duty?
+    - How to overcome fear?
+    - What is karma yoga?
+    - Who is Elon Musk? (general knowledge)
+    """)
+    
+    if st.button("🔄 Clear Chat"):
+        st.session_state.messages = []
+        st.rerun()
